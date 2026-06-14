@@ -1,78 +1,3 @@
-create s3
-aws s3 mb s3://image
-aws s3 mb s3://flip-image
-
-check it is created or not
-aws s3 ls
-
-
-to see laupload list in s3
-
-STEP 3 Create Project
-mkdir image-flip-app
-
-cd image-flip-app
-Structure
-image-flip-app
-│
-├── app.py
-├── requirements.txt
-├── Dockerfile
-├── templates
-│   └── index.html
-└── uploads
-STEP 4 requirements.txt
-fastapi
-uvicorn
-jinja2
-python-multipart
-boto3
-pillow
-STEP 5 FastAPI Code
-app.py
-from fastapi import FastAPI, UploadFile, File, Request
-from fastapi.templating import Jinja2Templates
-from fastapi.responses import HTMLResponse
-
-import boto3
-from PIL import Image
-from io import BytesIO
-import uuid
-
-app = FastAPI()
-
-templates = Jinja2Templates(directory="templates")
-
-s3 = boto3.client(
-    "s3",
-    endpoint_url="http://host.docker.internal:4566",
-    aws_access_key_id="test",
-    aws_secret_access_key="test",
-    region_name="us-east-1"
-)
-
-INPUT_BUCKET = "image"
-OUTPUT_BUCKET = "flip-image"
-
-@app.get("/", response_class=HTMLResponse)
-async def home(request: Request):
-    return templates.TemplateResponse(
-        "index.html",
-        {"request": request}
-    )
-
-@app.post("/upload")
-async def upload(file: UploadFile = File(...)):
-
-    image_bytes = await file.read()
-
-    image_key = str(uuid.uuid4()) + "-" + file.filename
-
-    s3.put_object(
-        Bucket=INPUT_BUCKET,
-        Key=image_key,
-        Body=image_bytes
-    )
 # Image Flip App — Local Floci/ECR/ECS Guide
 
 This repository contains a small FastAPI application (image-flip-app) and instructions to build, run, push to Floci ECR, and deploy locally to an ECS-like environment (Floci/LocalStack).
@@ -146,6 +71,74 @@ pillow
 ```
 
 The `app.py` should configure `boto3` to use `$LOCALSTACK_ENDPOINT`, accept file uploads, store to `image`, flip the image, then store to `flip-image`.
+
+Example `app.py` (complete):
+
+```python
+from fastapi import FastAPI, UploadFile, File, Request
+from fastapi.templating import Jinja2Templates
+from fastapi.responses import HTMLResponse, StreamingResponse
+
+import boto3
+from PIL import Image
+from io import BytesIO
+import uuid
+
+app = FastAPI()
+
+templates = Jinja2Templates(directory="templates")
+
+s3 = boto3.client(
+  "s3",
+  endpoint_url="http://host.docker.internal:4566",
+  aws_access_key_id="test",
+  aws_secret_access_key="test",
+  region_name="us-east-1"
+)
+
+INPUT_BUCKET = "image"
+OUTPUT_BUCKET = "flip-image"
+
+@app.get("/", response_class=HTMLResponse)
+async def home(request: Request):
+  return templates.TemplateResponse(
+    request=request,
+    name="index.html",
+    context={"request": request}
+  )
+
+# Serve images directly from S3
+@app.get("/image/{bucket}/{key}")
+async def get_s3_image(bucket: str, key: str):
+  s3_object = s3.get_object(Bucket=bucket, Key=key)
+  return StreamingResponse(s3_object['Body'], media_type="image/jpeg")
+
+@app.post("/upload")
+async def upload(file: UploadFile = File(...)):
+  image_bytes = await file.read()
+  image_key = str(uuid.uuid4()) + "-" + file.filename
+
+  # Save original to S3 input bucket
+  s3.put_object(Bucket=INPUT_BUCKET, Key=image_key, Body=image_bytes)
+
+  # Flip image and save to S3 output bucket
+  img = Image.open(BytesIO(image_bytes))
+  flipped = img.transpose(Image.FLIP_TOP_BOTTOM)
+
+  buffer = BytesIO()
+  img_format = img.format if img.format else "JPEG"
+  flipped.save(buffer, format=img_format)
+  buffer.seek(0)
+
+  flipped_key = "flipped-" + image_key
+  s3.put_object(Bucket=OUTPUT_BUCKET, Key=flipped_key, Body=buffer.getvalue())
+
+  return {
+    "message": "success",
+    "original": image_key,
+    "flipped": flipped_key
+  }
+```
 
 ## Local development (Docker)
 
