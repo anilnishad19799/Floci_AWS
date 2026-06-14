@@ -1,0 +1,32 @@
+{
+  "family": "image-flip-final-task",
+  "networkMode": "awsvpc",
+  "requiresCompatibilities": [
+    "FARGATE"
+  ],
+  "cpu": "256",
+  "memory": "512",
+  "containerDefinitions": [
+    {
+      "name": "image-flip",
+      "image": "image-flip-repo:latest",
+      "essential": true,
+      "portMappings": [
+        {
+          "containerPort": 8000,
+          "hostPort": 8000
+        }
+      ],
+      "environment": [
+        {
+          "name": "INPUT_BUCKET",
+          "value": "image"
+        },
+        {
+          "name": "OUTPUT_BUCKET",
+          "value": "flip-image"
+        }
+      ]
+    }
+  ]
+}
