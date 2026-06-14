@@ -33,8 +33,13 @@ The app accepts an uploaded image, flips it vertically, stores both original and
 Set these for convenience (example):
 
 ```bash
+export AWS_ENDPOINT_URL=http://localhost:4566
+export AWS_DEFAULT_REGION=us-east-1
+export AWS_ACCESS_KEY_ID=test
+export AWS_SECRET_ACCESS_KEY=test
 export LOCALSTACK_ENDPOINT=http://localhost:4566
 export ECR_HOST=localhost:5100
+
 ```
 
 ## Create local S3 buckets
@@ -300,16 +305,6 @@ aws s3 rb s3://flip-image --endpoint-url $LOCALSTACK_ENDPOINT
 - Replace placeholder host/ports (`localhost:5100`, container IDs) with values from your environment when running commands.
 
 ---
-
-If you'd like, I can:
-
-- add a `cleanup.sh` script that runs the forceful cleanup with confirmation prompts
-- commit minimal `app.py`, `requirements.txt`, and `Dockerfile` templates into `image-flip-app/`
-
-Please tell me which of these you'd like next.
-  --desired-count 1 \
-  --launch-type FARGATE \
-  --endpoint-url $LOCALSTACK_ENDPOINT
 ```
 
 ## Verify ECS task and access the app
