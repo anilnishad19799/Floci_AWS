@@ -460,8 +460,6 @@ docker inspect -f "{{range .NetworkSettings.Networks}}{{.IPAddress}}{{end}}" <CO
 
 curl http://<CONTAINER_INTERNAL_IP>:8000/
 
-
-
 Open:
 
 http://<CONTAINER_INTERNAL_IP>:8000/
@@ -470,7 +468,7 @@ Upload an image, then observe the expected processing flow below.
 
 ### Expected flow
 
-```mermaid
+```
 flowchart LR
   U[Upload image] --> S3I[S3 input bucket (image)]
   S3I --> FL[Flip vertically (Pillow)]
