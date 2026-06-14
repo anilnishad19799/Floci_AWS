@@ -1,46 +1,45 @@
 # Floci_AWS
 
-A small demo workspace that shows how to build and run local AWS-compatible workflows using Floci/LocalStack.
+Demo workspace for running local AWS-compatible workflows using Floci / LocalStack.
 
-Contents
+## Contents
 
-- `Floci_AWS/Lambda/` — simple AWS Lambda example with a FastAPI frontend that invokes the Lambda.
-- `Floci_AWS/ECR_ECS/` — Image Flip app: Docker build, push to local Floci ECR, and local ECS (Fargate-style) deployment guide.
+- [Lambda demo](Floci_AWS/Lambda/README.md) — simple Lambda function with a FastAPI frontend.
+- [ECR & ECS image-flip app](Floci_AWS/ECR_ECS/README.md) — Docker build, push to Floci ECR, and local ECS deployment guide.
 
-Prerequisites
+## Prerequisites
 
 - Docker
 - Python 3.11+
-- AWS CLI (configured to use `--endpoint-url` for LocalStack/Floci)
+- AWS CLI
 - Floci or LocalStack running (default endpoint: `http://localhost:4566`)
 
-Quick start
+## Quick start
 
-1. Start Floci/LocalStack.
-2. Follow the instructions in `Floci_AWS/Lambda/README.md` to create and test the Lambda demo.
-3. Follow the instructions in `Floci_AWS/ECR_ECS/README.md` to build the image-flip app, push to Floci ECR, and deploy to local ECS.
+1. Start Floci / LocalStack.
+2. Run the Lambda demo: see [Floci_AWS/Lambda/README.md](Floci_AWS/Lambda/README.md).
+3. Build and deploy the image-flip app: see [Floci_AWS/ECR_ECS/README.md](Floci_AWS/ECR_ECS/README.md).
 
-Useful commands
+## Useful commands
 
 ```bash
-# LocalStack endpoint example
 export LOCALSTACK_ENDPOINT=http://localhost:4566
 
-# List Lambda functions in LocalStack
+# List Lambda functions
 aws lambda list-functions --endpoint-url $LOCALSTACK_ENDPOINT
 
 # List ECR repositories
 aws ecr describe-repositories --endpoint-url $LOCALSTACK_ENDPOINT
 
-# Inspect Docker containers
+# Show running Docker containers
 docker ps
 ```
 
-Notes
+## Notes
 
-- Replace placeholder host/ports and ARNs in each README with values from your environment when necessary.
-- If you want, I can add convenience scripts (`deploy.sh`, `cleanup.sh`) to automate build/push/deploy and cleanup steps.
+- Replace placeholder host/ports and ARNs with values from your environment where needed.
+- Want convenience scripts? I can add `deploy.sh` and `cleanup.sh` to automate common tasks.
 
 ---
 
-Happy hacking — tell me if you want the convenience scripts added.
+If you'd like the helper scripts added, tell me which one to add first.
