@@ -73,130 +73,66 @@ async def upload(file: UploadFile = File(...)):
         Key=image_key,
         Body=image_bytes
     )
-
-    img = Image.open(BytesIO(image_bytes))
-
-    flipped = img.transpose(Image.FLIP_TOP_BOTTOM)
-
-    buffer = BytesIO()
-
-    flipped.save(buffer, format=img.format)
-
-    buffer.seek(0)
-
-    flipped_key = "flipped-" + image_key
-
-    s3.put_object(
-        Bucket=OUTPUT_BUCKET,
-        Key=flipped_key,
-        Body=buffer.getvalue()
-    )
-
-    return {
-        "message": "success",
-        "original": image_key,
-        "flipped": flipped_key
-    }
-STEP 6 UI
-templates/index.html
-<!DOCTYPE html>
-<html>
-<head>
-    <title>Image Flip</title>
-</head>
-<body>
-
-<h2>Upload Image</h2>
-
-<input type="file" id="imageFile">
-
-<button onclick="upload()">
-Upload
-</button>
-
-<pre id="result"></pre>
-
-<script>
-
-async function upload(){
-
-    let file =
-      document.getElementById("imageFile").files[0]
-
-    let fd = new FormData()
-
-    fd.append("file", file)
-
-    let response = await fetch(
-        "/upload",
-        {
-            method:"POST",
-            body:fd
-        }
-    )
-
-    let data = await response.json()
-
-    document.getElementById("result")
-    .innerText =
-        JSON.stringify(data,null,2)
-}
-
-</script>
 # Image Flip App — Local Floci/ECR/ECS Guide
 
-This document describes how to build, run, and deploy the Image Flip application locally using Docker, Floci's ECR emulation, and a local ECS (Fargate-style) deployment.
+This repository contains a small FastAPI application (image-flip-app) and instructions to build, run, push to Floci ECR, and deploy locally to an ECS-like environment (Floci/LocalStack).
 
-Contents
-- Overview
-- Prerequisites
-- Local S3 buckets
-- App project structure
-- Build & run locally (Docker)
-- Verify S3 uploads
-- Push image to Floci ECR
-- Run from Floci ECR
-- ECS: register task, create cluster & service
-- Verify ECS task and access the app
-- Cleanup & troubleshooting
+Table of contents
+- [Overview](#overview)
+- [Prerequisites](#prerequisites)
+- [Environment variables](#environment-variables)
+- [Create local S3 buckets](#create-local-s3-buckets)
+- [Project structure](#project-structure)
+- [Local development (Docker)](#local-development-docker)
+- [Push to Floci ECR](#push-to-floci-ecr)
+- [Run from Floci ECR](#run-from-floci-ecr)
+- [ECS: task, cluster & service](#ecs-task-cluster--service)
+- [Verify & access the app](#verify--access-the-app)
+- [Forceful cleanup (wipe workspace)](#forceful-cleanup-wipe-workspace)
+- [Cleanup commands](#cleanup-commands)
+- [Troubleshooting & notes](#troubleshooting--notes)
 
 ## Overview
 
-The Image Flip app is a small FastAPI service that accepts image uploads, flips them vertically using Pillow, writes the original and flipped images to S3, and returns JSON with the object keys.
+The app accepts an uploaded image, flips it vertically, stores both original and flipped images in S3, and returns the object keys as JSON.
 
 ## Prerequisites
 
-- Docker installed and running
-- `aws` CLI (configured to target Floci/LocalStack when needed)
-- Floci/LocalStack running locally on `http://localhost:4566`
-- Python 3.11+ for local development
+- Docker
+- AWS CLI (you will use `--endpoint-url` for Floci/LocalStack)
+- Floci / LocalStack running on `http://localhost:4566`
+- Python 3.11+ (for local dev)
 
-Environment variables used in examples:
+## Environment variables
 
-- `LOCALSTACK_ENDPOINT=http://localhost:4566`
-- `ECR_HOST=localhost:5100` (example Floci ECR host)
+Set these for convenience (example):
+
+```bash
+export LOCALSTACK_ENDPOINT=http://localhost:4566
+export ECR_HOST=localhost:5100
+```
 
 ## Create local S3 buckets
 
-Create the input/output buckets used by the app:
-
 ```bash
-LOCALSTACK_ENDPOINT=http://localhost:4566
 aws s3 mb s3://image --endpoint-url $LOCALSTACK_ENDPOINT
 aws s3 mb s3://flip-image --endpoint-url $LOCALSTACK_ENDPOINT
 
-# Verify
+# verify
 aws s3 ls --endpoint-url $LOCALSTACK_ENDPOINT
 ```
 
-## App project structure
+## Project structure
 
-Create the project folder `image-flip-app` with the following files:
+Create `image-flip-app/` with the following layout:
 
-- `app.py` — FastAPI application
-- `requirements.txt` — dependencies
-- `Dockerfile` — container image build
-- `templates/index.html` — simple upload UI
+```
+image-flip-app/
+├── app.py
+├── requirements.txt
+├── Dockerfile
+└── templates/index.html
+```
 
 Example `requirements.txt`:
 
@@ -209,9 +145,9 @@ boto3
 pillow
 ```
 
-Example `app.py` (summary): the app reads uploaded file bytes, stores the original into `image` bucket, flips vertically and stores into `flip-image`, then returns JSON with keys. Configure `boto3` to use `$LOCALSTACK_ENDPOINT`.
+The `app.py` should configure `boto3` to use `$LOCALSTACK_ENDPOINT`, accept file uploads, store to `image`, flip the image, then store to `flip-image`.
 
-## Build and run locally (Docker)
+## Local development (Docker)
 
 Build the image:
 
@@ -219,71 +155,59 @@ Build the image:
 docker build -t image-flip-app .
 ```
 
-Run the container locally:
+Run locally:
 
 ```bash
 docker run -p 8000:8000 image-flip-app
 ```
 
-Open: http://localhost:8000 and upload an image.
+Open `http://localhost:8000` and upload an image.
 
-## Verify S3 uploads
+## Push to Floci ECR
 
-List the input/output buckets in LocalStack:
-
-```bash
-aws s3 ls s3://image --endpoint-url $LOCALSTACK_ENDPOINT
-aws s3 ls s3://flip-image --endpoint-url $LOCALSTACK_ENDPOINT
-```
-
-You should see object keys like `uuid-filename.png` and `flipped-uuid-filename.png`.
-
-## Push image to Floci ECR
-
-Create ECR repository (Floci):
+Create repository (Floci ECR emulation):
 
 ```bash
 aws ecr create-repository --repository-name image-flip-repo --endpoint-url $LOCALSTACK_ENDPOINT
 ```
 
-Get the repository URI:
+Get repository URI:
 
 ```bash
 aws ecr describe-repositories --endpoint-url $LOCALSTACK_ENDPOINT
-# Example repository URI: $ECR_HOST/image-flip-repo
 ```
 
-Tag the local image and push to Floci ECR:
+Tag & push image:
 
 ```bash
 docker tag image-flip-app:latest $ECR_HOST/image-flip-repo:latest
 docker push $ECR_HOST/image-flip-repo:latest
 ```
 
-Verify images in the repository:
+Verify:
 
 ```bash
 aws ecr describe-images --repository-name image-flip-repo --endpoint-url $LOCALSTACK_ENDPOINT
 ```
 
-## Run from Floci ECR (pull and run)
+## Run from Floci ECR
 
-Pull and run the image from Floci ECR:
+Pull & run:
 
 ```bash
 docker pull $ECR_HOST/image-flip-repo:latest
 docker run -p 8000:8000 $ECR_HOST/image-flip-repo:latest
 ```
 
-## ECS: Register task, create cluster and service
+## ECS: task, cluster & service
 
-Create an ECS cluster:
+Create a cluster:
 
 ```bash
 aws ecs create-cluster --cluster-name image-flip-production-cluster --endpoint-url $LOCALSTACK_ENDPOINT
 ```
 
-Register a task definition (example JSON inline). Replace `image` with the ECR image/tag or local image name if using Docker cache:
+Register task definition (example):
 
 ```bash
 aws ecs register-task-definition --endpoint-url $LOCALSTACK_ENDPOINT --cli-input-json '{
@@ -295,27 +219,101 @@ aws ecs register-task-definition --endpoint-url $LOCALSTACK_ENDPOINT --cli-input
   "containerDefinitions": [
     {
       "name": "image-flip-container",
-      "image": "localhost:5100/image-flip-repo:latest",
+      "image": "'$ECR_HOST'/image-flip-repo:latest",
       "essential": true,
-      "portMappings": [
-        { "containerPort": 8000, "hostPort": 8000 }
-      ],
-      "environment": [
-        { "name": "INPUT_BUCKET", "value": "image" },
-        { "name": "OUTPUT_BUCKET", "value": "flip-image" }
-      ]
+      "portMappings": [ { "containerPort": 8000, "hostPort": 8000 } ],
+      "environment": [ { "name": "INPUT_BUCKET", "value": "image" }, { "name": "OUTPUT_BUCKET", "value": "flip-image" } ]
     }
   ]
 }'
 ```
 
-Create a service for the task:
+Create service:
 
 ```bash
 aws ecs create-service \
   --cluster image-flip-production-cluster \
   --service-name image-flip-service \
   --task-definition image-flip-production-task:1 \
+  --desired-count 1 \
+  --launch-type FARGATE \
+  --endpoint-url $LOCALSTACK_ENDPOINT
+```
+
+## Verify & access the app
+
+Get latest task ARN and describe it:
+
+```bash
+TASK_ARN=$(aws ecs list-tasks --cluster image-flip-production-cluster --endpoint-url $LOCALSTACK_ENDPOINT --query "taskArns[-1]" --output text)
+aws ecs describe-tasks --cluster image-flip-production-cluster --tasks $TASK_ARN --endpoint-url $LOCALSTACK_ENDPOINT
+```
+
+If the task runs as a Docker container locally, find container ID and internal IP:
+
+```bash
+docker ps | grep image-flip-app
+docker inspect -f "{{range .NetworkSettings.Networks}}{{.IPAddress}}{{end}}" <CONTAINER_ID>
+curl http://<CONTAINER_INTERNAL_IP>:8000/
+```
+
+## Forceful cleanup (wipe workspace)
+
+Use these commands to completely reset the local workspace (containers, services, clusters, task defs, local ECR tags, images):
+
+```bash
+# stop/remove matching containers
+docker stop $(docker ps -q --filter name=floci-ecs) || true
+docker rm $(docker ps -a -q --filter name=floci-ecs) || true
+
+# delete ECS service & cluster
+aws ecs delete-service --cluster image-flip-production-cluster --service image-flip-service --force --endpoint-url $LOCALSTACK_ENDPOINT || true
+aws ecs delete-cluster --cluster image-flip-production-cluster --endpoint-url $LOCALSTACK_ENDPOINT || true
+
+# deregister task definitions
+aws ecs deregister-task-definition --task-definition image-flip-production-task:1 --endpoint-url $LOCALSTACK_ENDPOINT || true
+aws ecs deregister-task-definition --task-definition image-flip-clean-task:1 --endpoint-url $LOCALSTACK_ENDPOINT || true
+
+# remove local ECR tags and registry container (adjust ids/hosts)
+docker rmi localhost:5100/image-flip-repo:latest || true
+docker rmi localhost:4510/image-flip-repo:latest || true
+docker rm -f 53609cf9c927 || true
+
+# prune images and volumes
+docker image prune -f
+docker volume prune -f
+
+# verification
+docker ps | grep image-flip || true
+docker images | grep image-flip || true
+```
+
+## Cleanup commands (selective)
+
+```bash
+aws ecs delete-service --cluster image-flip-production-cluster --service image-flip-service --force --endpoint-url $LOCALSTACK_ENDPOINT
+aws ecs delete-cluster --cluster image-flip-production-cluster --endpoint-url $LOCALSTACK_ENDPOINT
+aws ecr delete-repository --repository-name image-flip-repo --force --endpoint-url $LOCALSTACK_ENDPOINT
+aws s3 rm s3://image --recursive --endpoint-url $LOCALSTACK_ENDPOINT
+aws s3 rm s3://flip-image --recursive --endpoint-url $LOCALSTACK_ENDPOINT
+aws s3 rb s3://image --endpoint-url $LOCALSTACK_ENDPOINT
+aws s3 rb s3://flip-image --endpoint-url $LOCALSTACK_ENDPOINT
+```
+
+## Troubleshooting & notes
+
+- Ensure `$LOCALSTACK_ENDPOINT` matches your running Floci/LocalStack instance.
+- When testing locally, `docker run` is the fastest iteration loop.
+- Replace placeholder host/ports (`localhost:5100`, container IDs) with values from your environment when running commands.
+
+---
+
+If you'd like, I can:
+
+- add a `cleanup.sh` script that runs the forceful cleanup with confirmation prompts
+- commit minimal `app.py`, `requirements.txt`, and `Dockerfile` templates into `image-flip-app/`
+
+Please tell me which of these you'd like next.
   --desired-count 1 \
   --launch-type FARGATE \
   --endpoint-url $LOCALSTACK_ENDPOINT
