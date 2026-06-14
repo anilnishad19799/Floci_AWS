@@ -462,20 +462,20 @@ curl http://<CONTAINER_INTERNAL_IP>:8000/
 
 
 
-Open
+Open:
+
 http://<CONTAINER_INTERNAL_IP>:8000/
-Upload image
-Expected flow:
-Image Upload
-      |
-      v
-S3 image bucket
-      |
-      v
-Flip vertically
-      |
-      v
-S3 flip-image bucket
-      |
-      v
-Return JSON
+
+Upload an image, then observe the expected processing flow below.
+
+### Expected flow
+
+```mermaid
+flowchart LR
+  U[Upload image] --> S3I[S3 input bucket (image)]
+  S3I --> FL[Flip vertically (Pillow)]
+  FL --> S3O[S3 output bucket (flip-image)]
+  S3O --> R[Return JSON with keys]
+```
+
+Plain sequence: Upload image -> S3 input bucket -> Flip vertically -> S3 flip-image bucket -> Return JSON
